@@ -1,1 +1,3 @@
-a single example to build rpc with wangle and gpb
+a single example to build rpc with wangle and gpb.
+
+clientbootstrap.patch is the patch for wangle to support IOThreadPool and server restart.
