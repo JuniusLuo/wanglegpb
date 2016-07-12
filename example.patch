@@ -1,0 +1,109 @@
+diff --git a/wangle/CMakeLists.txt b/wangle/CMakeLists.txt
+index a1e8e69..03a4569 100644
+--- a/wangle/CMakeLists.txt
++++ b/wangle/CMakeLists.txt
+@@ -165,7 +165,7 @@ endif()
+   add_gtest(ssl/test/SSLContextManagerTest.cpp SSLContextManagerTest)
+ endif()
+ 
+-option(BUILD_EXAMPLES "BUILD_EXAMPLES" OFF)
++option(BUILD_EXAMPLES "BUILD_EXAMPLES" ON)
+ 
+ if(BUILD_EXAMPLES)
+   add_executable(EchoClient example/echo/EchoClient.cpp)
+diff --git a/wangle/example/echo/EchoClient.cpp b/wangle/example/echo/EchoClient.cpp
+index 5ee0cad..bcdd6d0 100644
+--- a/wangle/example/echo/EchoClient.cpp
++++ b/wangle/example/echo/EchoClient.cpp
+@@ -59,27 +59,50 @@ class EchoPipelineFactory : public PipelineFactory<EchoPipeline> {
+ int main(int argc, char** argv) {
+   google::ParseCommandLineFlags(&argc, &argv, true);
+ 
++  std::shared_ptr<wangle::IOThreadPoolExecutor> ioPool = 
++    std::make_shared<wangle::IOThreadPoolExecutor>(2);
++  std::shared_ptr<EchoPipelineFactory> pipeFact = 
++    std::make_shared<EchoPipelineFactory>();
++
+   ClientBootstrap<EchoPipeline> client;
+-  client.group(std::make_shared<wangle::IOThreadPoolExecutor>(1));
+-  client.pipelineFactory(std::make_shared<EchoPipelineFactory>());
++  client.group(ioPool);
++  client.pipelineFactory(pipeFact);
++  //client.group(std::make_shared<wangle::IOThreadPoolExecutor>(1));
++  //client.pipelineFactory(std::make_shared<EchoPipelineFactory>());
+   auto pipeline = client.connect(SocketAddress(FLAGS_host, FLAGS_port)).get();
+ 
+   try {
+     while (true) {
+-      std::string line;
+-      std::getline(std::cin, line);
+-      if (line == "") {
+-        break;
+-      }
++      try {
++        std::string line;
++        std::getline(std::cin, line);
++        if (line == "") {
++          std::cout << "receive empty line, exit" << std::endl;
++          break;
++        }
++
++        // reset connection
++        //ClientBootstrap<EchoPipeline> client1;
++        //client1.group(ioPool);
++        //client1.pipelineFactory(pipeFact);
++        pipeline = client.connect(SocketAddress(FLAGS_host, FLAGS_port)).get();
+ 
+-      pipeline->write(line + "\r\n").get();
+-      if (line == "bye") {
+-        pipeline->close();
+-        break;
++        std::cout << " reconnected to " << FLAGS_host << " " << FLAGS_port << std::endl;
++        pipeline->write(line + "\r\n").get();
++        if (line == "bye") {
++          std::cout << "receive bye, exit" << std::endl;
++          pipeline->close();
++          break;
++        }
++
++        std::this_thread::sleep_for(std::chrono::seconds(1));
++ 
++      } catch (const folly::AsyncSocketException& fe) {
++        std::cout << "folly::AsyncSocketException " << exceptionStr(fe) << std::endl;
+       }
+     }
+   } catch (const std::exception& e) {
+-    std::cout << exceptionStr(e) << std::endl;
++    std::cout << "exception: " << exceptionStr(e) << std::endl;
+   }
+ 
+   return 0;
+diff --git a/wangle/example/echo/EchoServer.cpp b/wangle/example/echo/EchoServer.cpp
+index 94af041..ed556fe 100644
+--- a/wangle/example/echo/EchoServer.cpp
++++ b/wangle/example/echo/EchoServer.cpp
+@@ -26,7 +26,15 @@ typedef Pipeline<IOBufQueue&, std::string> EchoPipeline;
+ class EchoHandler : public HandlerAdapter<std::string> {
+  public:
+   virtual void read(Context* ctx, std::string msg) override {
+-    std::cout << "handling " << msg << std::endl;
++    bool doSleep = false;
++    if (!doSleep) {
++      std::cout << "handling " << msg << std::endl;
++    } else {
++      std::cout << "thread " << std::this_thread::get_id() 
++                << "handling " << msg << "; sleep 5s" << std::endl;
++      sleep(5);
++      std::cout << "; sleep done, echo back" << std::endl;
++    }
+     write(ctx, msg + "\r\n");
+   }
+ };
+@@ -50,6 +58,7 @@ int main(int argc, char** argv) {
+ 
+   ServerBootstrap<EchoPipeline> server;
+   server.childPipeline(std::make_shared<EchoPipelineFactory>());
++  server.group(std::make_shared<wangle::IOThreadPoolExecutor>(2));
+   server.bind(FLAGS_port);
+   server.waitForStop();
+ 

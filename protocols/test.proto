@@ -1,0 +1,24 @@
+// See README.txt for information and build instructions.
+//
+// Note: START and END tags are used in comments to define sections used in
+// tutorials.  They are not part of the syntax for Protocol Buffers.
+//
+// To get an in-depth walkthrough of this file and the related examples, see:
+// https://developers.google.com/protocol-buffers/docs/tutorials
+
+// [START declaration]
+syntax = "proto3";
+package test;
+// [END declaration]
+
+// [START messages]
+message BonkRequest {
+  uint64 id = 1;  // Unique ID number for this Bonk.
+  string name = 2;
+}
+
+message BonkResponse {
+  uint64 id = 1;  // Unique ID number for this Bonk.
+  string name = 2;
+}
+// [END messages]
